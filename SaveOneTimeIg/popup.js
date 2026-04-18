@@ -21,7 +21,37 @@
   };
 
   const DM_URL_PATTERN = /instagram\.com\/direct\/t\//i;
-  const MEDIA_URL_PATTERN = /https:\/\/[^"'\\\s]+?\.(?:jpe?g|png|webp|gif|mp4|webm)(?:\?[^"'\\\s]*)?/gi;
+  const MEDIA_URL_PATTERN = /https:\/\/[^"'\\\s]+?\.(?:jpe?g|png|gif|webp|mp4|webm)(?:\?[^"'\\\s]*)?/gi;
+  const LEGACY_VIDEO_PATTERN = /https:\/\/video[^",\s]+/gi;
+  const ALLOWED_MEDIA_HOST_PATTERN = /(?:fbcdn\.net|cdninstagram\.com)$/i;
+  const STRONG_EPHEMERAL_MARKERS = [
+    "view_mode",
+    "is_view_once",
+    "is_replayable",
+    "raven_media",
+    "visual_message",
+    "direct_visual_message",
+    "ephemeral_media",
+  ];
+  const SOFT_EPHEMERAL_MARKERS = [
+    "view_once",
+    "one_time",
+    "ephemeral",
+    "expiring",
+    "replay_expiring",
+    "disappearing_mode",
+    "message_type",
+    "visual_media",
+  ];
+  const EXCLUDED_CONTEXT_MARKERS = [
+    "profile_pic_url",
+    "avatar_url",
+    "story_share",
+    "broadcast",
+    "preview_url",
+    "thumbnail_src",
+    "display_url",
+  ];
 
   const elements = Object.fromEntries(
     Object.entries(SELECTORS).map(([key, selector]) => [key, document.querySelector(selector)])
@@ -74,6 +104,97 @@
 
   function normalizeText(value) {
     return value.replace(/\\\\/g, "").replace(/\\\//g, "/").replace(/\/+$/g, "").trim();
+  }
+
+  function isSupportedMediaUrl(url) {
+    try {
+      return ALLOWED_MEDIA_HOST_PATTERN.test(new URL(url).hostname);
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  function getContextWindow(source, index, length, radius = 420) {
+    const start = Math.max(0, index - radius);
+    const end = Math.min(source.length, index + length + radius);
+    return source.slice(start, end);
+  }
+
+  function countMatches(patterns, text) {
+    const lowerText = text.toLowerCase();
+    return patterns.reduce((count, pattern) => count + Number(lowerText.includes(pattern.toLowerCase())), 0);
+  }
+
+  function isEphemeralMediaCandidate(url, context) {
+    if (!isSupportedMediaUrl(url)) {
+      return false;
+    }
+
+    const lowerContext = context.toLowerCase();
+    if (EXCLUDED_CONTEXT_MARKERS.some((marker) => lowerContext.includes(marker.toLowerCase()))) {
+      return false;
+    }
+
+    const strongSignals = countMatches(STRONG_EPHEMERAL_MARKERS, context);
+    if (strongSignals >= 1) {
+      return true;
+    }
+
+    const softSignals = countMatches(SOFT_EPHEMERAL_MARKERS, context);
+    return softSignals >= 2;
+  }
+
+  function getEphemeralWindows(html) {
+    const windows = [];
+    const normalizedMarkers = [...STRONG_EPHEMERAL_MARKERS, ...SOFT_EPHEMERAL_MARKERS];
+
+    for (const marker of normalizedMarkers) {
+      let fromIndex = 0;
+      const lowerHtml = html.toLowerCase();
+      const lowerMarker = marker.toLowerCase();
+
+      while (fromIndex < lowerHtml.length) {
+        const markerIndex = lowerHtml.indexOf(lowerMarker, fromIndex);
+        if (markerIndex === -1) {
+          break;
+        }
+
+        windows.push(getContextWindow(html, markerIndex, lowerMarker.length, 2800));
+        fromIndex = markerIndex + lowerMarker.length;
+      }
+    }
+
+    return windows;
+  }
+
+  function collectEphemeralMediaUrls(html) {
+    const candidateUrls = new Set();
+    const windows = getEphemeralWindows(html);
+
+    for (const windowText of windows) {
+      MEDIA_URL_PATTERN.lastIndex = 0;
+      let match = null;
+
+      while ((match = MEDIA_URL_PATTERN.exec(windowText)) !== null) {
+        const url = match[0].replace(/\\+$/g, "");
+        const localContext = getContextWindow(windowText, match.index, match[0].length, 240);
+
+        if (isEphemeralMediaCandidate(url, localContext)) {
+          candidateUrls.add(url);
+        }
+      }
+    }
+
+    if (!candidateUrls.size) {
+      LEGACY_VIDEO_PATTERN.lastIndex = 0;
+      let legacyMatch = null;
+
+      while ((legacyMatch = LEGACY_VIDEO_PATTERN.exec(html)) !== null) {
+        candidateUrls.add(legacyMatch[0].replace(/\\+$/g, ""));
+      }
+    }
+
+    return candidateUrls;
   }
 
   function getFileExtension(url) {
@@ -249,12 +370,10 @@
         .join("\n");
 
       const existingUrls = new Set(Array.from(state.media.values(), (entry) => entry.url));
-      let match = MEDIA_URL_PATTERN.exec("");
+      const ephemeralUrls = collectEphemeralMediaUrls(normalizedHtml);
       let foundNewMedia = false;
 
-      MEDIA_URL_PATTERN.lastIndex = 0;
-      while ((match = MEDIA_URL_PATTERN.exec(normalizedHtml)) !== null) {
-        const url = match[0].replace(/\\+$/g, "");
+      for (const url of ephemeralUrls) {
         if (existingUrls.has(url)) {
           continue;
         }
