@@ -290,7 +290,7 @@
           <div class="scan-state__spinner"></div>
         </div>
         <h3>Scanning the conversation</h3>
-        <p>Keep the Instagram DM thread open. SaveOneTimeIG will keep checking for view-once media every few seconds.</p>
+        <p>Keep the Instagram DM thread open. SaveOneTime will keep checking for view-once media every few seconds.</p>
       </section>
     `;
   }
@@ -574,7 +574,7 @@
 
       chrome.downloads.download({
         url: url,
-        filename: `SaveOneTimeIG_${Date.now()}.zip`,
+        filename: `SaveOneTime_${Date.now()}.zip`,
         saveAs: true,
       }, () => {
         if (chrome.runtime.lastError) {
@@ -619,8 +619,44 @@
     loadPreviewMedia(entry.url, preview);
     wrapper.appendChild(preview);
 
+    const downloadBtn = document.createElement("button");
+    downloadBtn.type = "button";
+    downloadBtn.title = "Download media";
+    downloadBtn.innerHTML = `
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 3v12"></path>
+        <path d="m7 10 5 5 5-5"></path>
+        <path d="M5 21h14"></path>
+      </svg>
+      <span>Download</span>
+    `;
+    downloadBtn.style.cssText = "position: absolute; bottom: 24px; right: 24px; background: rgba(0, 0, 0, 0.75); color: #fff; border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 8px; padding: 8px 16px; display: flex; align-items: center; gap: 8px; font-weight: 500; font-family: inherit; font-size: 14px; cursor: pointer; backdrop-filter: blur(8px); z-index: 1000;";
+
+    downloadBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      requestDownload(entry.url, getFilenameFromUrl(entry.url));
+    });
+
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.title = "Close preview";
+    closeBtn.innerHTML = `
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M18 6L6 18"></path>
+        <path d="M6 6l12 12"></path>
+      </svg>
+    `;
+    closeBtn.style.cssText = "position: absolute; top: 24px; right: 24px; background: rgba(0, 0, 0, 0.75); color: #fff; border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; cursor: pointer; backdrop-filter: blur(8px); z-index: 1000;";
+
+    closeBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      closeOverlay();
+    });
+
     elements.overlay.innerHTML = "";
     elements.overlay.appendChild(wrapper);
+    elements.overlay.appendChild(downloadBtn);
+    elements.overlay.appendChild(closeBtn);
     elements.overlay.classList.add("is-active");
     elements.overlay.setAttribute("aria-hidden", "false");
   }
@@ -719,7 +755,7 @@
       document.body.classList.add("desktop");
     }
 
-    elements.version.textContent = "v1.1.0";
+    elements.version.textContent = "v1.0";
     updateHeaderState();
     bindEvents();
     renderMediaGrid();

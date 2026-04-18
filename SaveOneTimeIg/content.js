@@ -1,5 +1,5 @@
 (() => {
-  const BADGE_ID = "SaveOneTimeIG-inbox-badge";
+  const BADGE_ID = "SaveOneTime-inbox-badge";
   const INBOX_PATH = "/direct/inbox/";
   const THREAD_PATH = /^\/direct\/t\/[^/]+\/?$/;
 
@@ -17,11 +17,11 @@
 
     badge.id = BADGE_ID;
     badge.type = "button";
-    badge.title = "Open SaveOneTimeIG desktop view";
-    badge.setAttribute("aria-label", "Open SaveOneTimeIG desktop view");
+    badge.title = "Open SaveOneTime desktop view";
+    badge.setAttribute("aria-label", "Open SaveOneTime desktop view");
 
     icon.src = chrome.runtime.getURL("icon.png");
-    icon.alt = "SaveOneTimeIG";
+    icon.alt = "SaveOneTime";
 
     badge.appendChild(icon);
     badge.addEventListener("click", () => {

@@ -169,7 +169,7 @@
 
     await chrome.downloads.download({
       url: dataUrl,
-      filename: `SaveOneTimeIG_${Date.now()}.zip`,
+      filename: `SaveOneTime_${Date.now()}.zip`,
       saveAs: true,
     });
   }
