@@ -61,6 +61,17 @@
     return filename.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_");
   }
 
+  async function blobToDataUrl(blob) {
+    const buffer = await blob.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    let binary = "";
+    const chunkSize = 8192;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+    }
+    return `data:${blob.type || "application/zip"};base64,${btoa(binary)}`;
+  }
+
   function buildStoredZip(entries) {
     const encoder = new TextEncoder();
     const localChunks = [];
@@ -154,17 +165,13 @@
     }
 
     const zipBlob = buildStoredZip(entries);
-    const objectUrl = URL.createObjectURL(zipBlob);
+    const dataUrl = await blobToDataUrl(zipBlob);
 
-    try {
-      await chrome.downloads.download({
-        url: objectUrl,
-        filename: `SaveOneTimeIG_${Date.now()}.zip`,
-        saveAs: true,
-      });
-    } finally {
-      setTimeout(() => URL.revokeObjectURL(objectUrl), 10000);
-    }
+    await chrome.downloads.download({
+      url: dataUrl,
+      filename: `SaveOneTimeIG_${Date.now()}.zip`,
+      saveAs: true,
+    });
   }
 
   function openDesktopView(sendResponse) {
@@ -190,9 +197,6 @@
 
   function handleMessage(message, _sender, sendResponse) {
     switch (message.action) {
-      case "OPEN_DESKTOP_VIEW":
-        openDesktopView(sendResponse);
-        return true;
       case "DOWNLOAD_ZIP":
         createZipFromFiles(message.files)
           .then(() => sendResponse({ success: true }))
@@ -206,6 +210,6 @@
     }
   }
 
-  chrome.runtime.onInstalled.addListener(() => {});
+  chrome.runtime.onInstalled.addListener(() => { });
   chrome.runtime.onMessage.addListener(handleMessage);
 })();

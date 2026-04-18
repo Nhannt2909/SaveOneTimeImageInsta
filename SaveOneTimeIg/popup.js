@@ -405,18 +405,137 @@
     }
   }
 
-  function requestDownload(url, filename) {
-    chrome.runtime.sendMessage({ action: "DOWNLOAD_SINGLE", filename, url }, (response) => {
-      if (chrome.runtime.lastError || !response?.success) {
-        showToast("Download failed", "error");
-        return;
-      }
+  async function requestDownload(url, filename) {
+    showToast(`Downloading media...`);
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
 
-      showToast(`Downloading ${filename.length > 24 ? `${filename.slice(0, 24)}...` : filename}`);
-    });
+      chrome.downloads.download({
+        url: objectUrl,
+        filename: filename,
+        saveAs: false,
+      }, (downloadId) => {
+        if (chrome.runtime.lastError || !downloadId) {
+          showToast("Download failed", "error");
+        } else {
+          showToast("Download started");
+        }
+      });
+    } catch (_error) {
+      showToast("Download failed", "error");
+    }
   }
 
-  function requestZipDownload() {
+  const ZIP_SIGNATURES = {
+    centralDirectory: 0x02014b50,
+    endOfCentralDirectory: 0x06054b50,
+    localFileHeader: 0x04034b50,
+  };
+
+  const crcTable = new Uint32Array(256);
+  for (let index = 0; index < 256; index += 1) {
+    let value = index;
+    for (let bit = 0; bit < 8; bit += 1) {
+      value = (value & 1) ? (0xedb88320 ^ (value >>> 1)) : (value >>> 1);
+    }
+    crcTable[index] = value >>> 0;
+  }
+
+  function crc32(bytes) {
+    let crc = 0xffffffff;
+    for (const byte of bytes) {
+      crc = crcTable[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+    }
+    return (crc ^ 0xffffffff) >>> 0;
+  }
+
+  function getDosDateTime(date = new Date()) {
+    const safeYear = Math.max(1980, date.getFullYear());
+    return {
+      dosDate: ((safeYear - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate(),
+      dosTime: (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2),
+    };
+  }
+
+  function toUint16(value) {
+    const output = new Uint8Array(2);
+    new DataView(output.buffer).setUint16(0, value, true);
+    return output;
+  }
+
+  function toUint32(value) {
+    const output = new Uint8Array(4);
+    new DataView(output.buffer).setUint32(0, value, true);
+    return output;
+  }
+
+  function concatUint8Arrays(chunks) {
+    const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+    const output = new Uint8Array(totalLength);
+    let offset = 0;
+    for (const chunk of chunks) {
+      output.set(chunk, offset);
+      offset += chunk.length;
+    }
+    return output;
+  }
+
+  function sanitizeFilename(filename) {
+    return filename.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_");
+  }
+
+  function buildStoredZip(entries) {
+    const encoder = new TextEncoder();
+    const localChunks = [];
+    const centralChunks = [];
+    const { dosDate, dosTime } = getDosDateTime();
+    let currentOffset = 0;
+
+    for (const entry of entries) {
+      const nameBytes = encoder.encode(sanitizeFilename(entry.filename));
+      const checksum = crc32(entry.bytes);
+
+      const localHeader = concatUint8Arrays([
+        toUint32(ZIP_SIGNATURES.localFileHeader),
+        toUint16(20), toUint16(0), toUint16(0),
+        toUint16(dosTime), toUint16(dosDate),
+        toUint32(checksum), toUint32(entry.bytes.length), toUint32(entry.bytes.length),
+        toUint16(nameBytes.length), toUint16(0),
+        nameBytes,
+      ]);
+
+      localChunks.push(localHeader, entry.bytes);
+
+      const centralHeader = concatUint8Arrays([
+        toUint32(ZIP_SIGNATURES.centralDirectory),
+        toUint16(20), toUint16(20), toUint16(0), toUint16(0),
+        toUint16(dosTime), toUint16(dosDate),
+        toUint32(checksum), toUint32(entry.bytes.length), toUint32(entry.bytes.length),
+        toUint16(nameBytes.length), toUint16(0), toUint16(0), toUint16(0), toUint16(0),
+        toUint32(0), toUint32(currentOffset),
+        nameBytes,
+      ]);
+
+      centralChunks.push(centralHeader);
+      currentOffset += localHeader.length + entry.bytes.length;
+    }
+
+    const localDirectory = concatUint8Arrays(localChunks);
+    const centralDirectory = concatUint8Arrays(centralChunks);
+    const endRecord = concatUint8Arrays([
+      toUint32(ZIP_SIGNATURES.endOfCentralDirectory),
+      toUint16(0), toUint16(0),
+      toUint16(entries.length), toUint16(entries.length),
+      toUint32(centralDirectory.length), toUint32(localDirectory.length),
+      toUint16(0),
+    ]);
+
+    return new Blob([localDirectory, centralDirectory, endRecord], { type: "application/zip" });
+  }
+
+  async function requestZipDownload() {
     if (!state.media.size) {
       showToast("No media available to zip", "error");
       return;
@@ -427,15 +546,48 @@
       url: entry.url,
     }));
 
-    showToast("Preparing ZIP in background...");
-    chrome.runtime.sendMessage({ action: "DOWNLOAD_ZIP", files }, (response) => {
-      if (chrome.runtime.lastError || !response?.success) {
-        showToast("ZIP download failed", "error");
-        return;
+    showToast("Preparing ZIP (keep popup open)...");
+
+    try {
+      const entries = [];
+      for (const file of files) {
+        try {
+          const response = await fetch(file.url);
+          const buffer = await response.arrayBuffer();
+          entries.push({
+            bytes: new Uint8Array(buffer),
+            filename: file.filename,
+          });
+          showToast("push to array success");
+        } catch (_error) {
+          showToast("push to array fail");
+          chrome.extension.getBackgroundPage().console.log("fail push");
+          await delay(5000);
+        }
       }
 
-      showToast("ZIP download started");
-    });
+      if (!entries.length) {
+        throw new Error("No files available for ZIP export");
+      }
+      const zipBlob = buildStoredZip(entries);
+      const url = URL.createObjectURL(zipBlob);
+
+      chrome.downloads.download({
+        url: url,
+        filename: `SaveOneTimeIG_${Date.now()}.zip`,
+        saveAs: true,
+      }, () => {
+        if (chrome.runtime.lastError) {
+          showToast("ZIP download failed", "error");
+        } else {
+          showToast("ZIP download started");
+        }
+      });
+    } catch (error) {
+      chrome.extension.getBackgroundPage().console.log("fail biuld");
+      showToast("ZIP download failed", "error");
+    }
+    showToast("ZIP download success");
   }
 
   function openOverlay(cardName) {
