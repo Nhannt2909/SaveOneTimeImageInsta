@@ -1,0 +1,47 @@
+{
+  "update_url": "https://clients2.google.com/service/update2/crx",
+  "manifest_version": 3,
+  "name": "SaveOneTimeIG: Save One Time Image on instagram",
+  "version": "1.1.0",
+  "description": "View and save one time view on instagram and facebook",
+  "permissions": ["scripting", "activeTab", "downloads", "storage"],
+  "host_permissions": [
+    "https://www.instagram.com/direct/t/*",
+    "https://www.instagram.com/direct/inbox/",
+    "https://www.instagram.com/direct/inbox/*",
+    "https://*.fbcdn.net/*",
+    "https://*.cdninstagram.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.instagram.com/direct/t/*",
+        "https://www.instagram.com/direct/inbox/",
+        "https://www.instagram.com/direct/inbox/*"
+      ],
+      "js": ["content.js"]
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["icon.png"],
+      "matches": ["https://www.instagram.com/*"]
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": "icon.png"
+  },
+  "icons": {
+    "16": "icon.png",
+    "32": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  }
+}

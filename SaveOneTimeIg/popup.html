@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SaveOneTimeIG</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+  <div class="app-shell">
+    <div class="app-backdrop" aria-hidden="true">
+      <span class="backdrop-orb orb-a"></span>
+      <span class="backdrop-orb orb-b"></span>
+      <span class="backdrop-grid"></span>
+    </div>
+
+    <header class="hero">
+      <div class="hero-brand">
+        <div class="hero-icon-wrap">
+          <img src="icon.png" alt="SaveOneTimeIG" class="hero-icon">
+        </div>
+
+        <div class="hero-copy">
+          <div class="hero-title-row">
+            <h1>SaveOneTimeIG</h1>
+            <span id="app-version" class="hero-version">v1.1.0</span>
+          </div>
+          <p>Scan Instagram DM threads and save one-time media before it disappears.</p>
+        </div>
+      </div>
+
+      <div class="hero-actions">
+        <button id="theme-btn" class="icon-button" type="button" title="Toggle theme" aria-label="Toggle theme">
+          <span class="icon-button__glyph">◐</span>
+        </button>
+        <button id="header-refresh-btn" class="icon-button" type="button" title="Reload current tab"
+          aria-label="Reload current tab">
+          <span class="icon-button__glyph">↻</span>
+        </button>
+        <button id="zip-btn" class="primary-button" type="button">
+          <span>Download ZIP</span>
+        </button>
+      </div>
+    </header>
+
+    <main class="content">
+      <section class="status-panel">
+        <div class="status-summary">
+          <div class="status-chip">
+            <span id="scan-dot" class="status-chip__dot"></span>
+            <span id="scan-label">Scanning DM thread</span>
+          </div>
+          <p id="scan-description" class="status-description">Looking for one-time Instagram media in the active tab.</p>
+        </div>
+
+        <div class="stats-grid">
+          <article class="stat-card">
+            <span class="stat-card__label">Media found</span>
+            <strong id="count-badge" class="stat-card__value">0 items</strong>
+          </article>
+          <article class="stat-card">
+            <span class="stat-card__label">Source</span>
+            <strong id="source-label" class="stat-card__value">Instagram DM</strong>
+          </article>
+        </div>
+      </section>
+
+      <section class="toolbar" aria-label="Popup tools">
+        <div class="toolbar-copy">
+          <h2>Captured media</h2>
+          <p>Click a card to preview. Use the download button to save the original file.</p>
+        </div>
+        <button id="refresh-page-btn" class="secondary-button" type="button">
+          <span>Rescan page</span>
+        </button>
+      </section>
+
+      <section id="media-grid" class="media-grid" aria-live="polite">
+        <div class="loading-card"></div>
+        <div class="loading-card"></div>
+        <div class="loading-card"></div>
+        <div class="loading-card"></div>
+      </section>
+    </main>
+
+    <div id="overlay" class="overlay" aria-hidden="true"></div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite">
+      <div class="toast__icon" aria-hidden="true"></div>
+      <span id="toast-msg">Ready</span>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+
+</html>
